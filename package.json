@@ -1,0 +1,14 @@
+{
+  "name": "fdroiddata-search",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "cli-progress": "^3.12.0"
+  }
+}
