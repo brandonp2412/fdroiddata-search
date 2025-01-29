@@ -1,15 +1,26 @@
-# fdroiddata-search
+# Fdroid Data Search
 
-To install dependencies:
+Raw text searching for Fdroiddata pipelines is disabled.
 
-```bash
+![](./screenshot-gitlab.png)
+
+This script searches through them using the Gitlab API.
+
+![](./screenshot-search.png)
+
+# Usage
+
+```sh
+git clone https://github.com/brandonp2412/F-droid-data-search fdroiddata-search
+cd fdroiddata-search
 bun install
+bun search.ts flexify
 ```
 
-To run:
+# Optional args
 
-```bash
-bun run index.ts
+Pass limit to go beyond 99 pages of the pipelines:
+
+```sh
+bun search.ts Notally 999
 ```
-
-This project was created using `bun init` in bun v1.1.42. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
