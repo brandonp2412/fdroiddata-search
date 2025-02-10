@@ -23,8 +23,10 @@ while (page < limit) {
   const json: { count: any; pipelines: Pipeline[] } = await response.json();
 
   for (const pipeline of json.pipelines) {
-    if (pipeline.commit.title.toLowerCase().includes(search))
-      console.log("\nhttps://gitlab.com" + pipeline.path);
+    if (pipeline.details.status.label == "skipped") continue;
+    if (pipeline.details.status.label == "canceled") continue;
+    if (!pipeline.commit.title.toLowerCase().includes(search)) continue;
+    console.log("\nhttps://gitlab.com" + pipeline.path);
   }
 
   page++;
