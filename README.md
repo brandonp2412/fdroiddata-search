@@ -17,6 +17,13 @@ bun install
 bun search.ts flexify
 ```
 
+Package ids also work, and look up every pipeline that touched the app's
+metadata file directly (no page limit needed):
+
+```sh
+bun search.ts com.presley.flexify
+```
+
 # Optional args
 
 Pass limit to go beyond 99 pages of the pipelines:
