@@ -44,4 +44,20 @@ describe("fetchJson", () => {
       "GitLab request failed: connection reset",
     );
   });
+
+  test("times out stalled requests", async () => {
+    globalThis.fetch = ((_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (!signal) {
+          reject(new Error("missing abort signal"));
+          return;
+        }
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      })) as typeof fetch;
+
+    await expect(fetchJson("https://example.test", undefined, 5)).rejects.toThrow(
+      "GitLab request timed out after 5ms.",
+    );
+  });
 });
