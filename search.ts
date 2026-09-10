@@ -1,6 +1,7 @@
 import process from "process";
 import boxen from "boxen";
 import { parsePageLimit } from "./args";
+import { fetchJson } from "./http";
 import type {
   GraphQLResponse,
   Commit,
@@ -52,13 +53,15 @@ function show(pipe: RestPipeline, title: string) {
 
 async function searchCommits() {
   const commits: Commit[] = [];
+  const metadataPath = encodeURIComponent(`metadata/${search}.yml`);
   for (let page = 1; page <= 10; page++) {
-    const res = await fetch(
-      `https://gitlab.com/api/v4/projects/${project}/repository/commits?path=metadata/${search}.yml&per_page=100&page=${page}`,
+    const batch = await fetchJson<unknown>(
+      `https://gitlab.com/api/v4/projects/${project}/repository/commits?path=${metadataPath}&per_page=100&page=${page}`,
     );
-    const batch = await res.json();
-    if (!Array.isArray(batch)) break;
-    commits.push(...batch);
+    if (!Array.isArray(batch)) {
+      throw new Error("GitLab commits response was not an array.");
+    }
+    commits.push(...(batch as Commit[]));
     if (batch.length < 100) break;
   }
 
@@ -66,15 +69,17 @@ async function searchCommits() {
   for (let i = 0; i < commits.length; i += 10) {
     const runs = await Promise.all(
       commits.slice(i, i + 10).map(async (commit) => {
-        const res = await fetch(
-          `https://gitlab.com/api/v4/projects/${project}/pipelines?sha=${commit.id}`,
+        const pipes = await fetchJson<unknown>(
+          `https://gitlab.com/api/v4/projects/${project}/pipelines?sha=${encodeURIComponent(commit.id)}`,
         );
-        const pipes = await res.json();
-        return { commit, pipes: Array.isArray(pipes) ? pipes : [] };
+        if (!Array.isArray(pipes)) {
+          throw new Error("GitLab pipelines response was not an array.");
+        }
+        return { commit, pipes: pipes as RestPipeline[] };
       }),
     );
     for (const { commit, pipes } of runs) {
-      for (const pipe of pipes as RestPipeline[]) {
+      for (const pipe of pipes) {
         found += show(pipe, commit.title);
       }
     }
@@ -84,25 +89,28 @@ async function searchCommits() {
 }
 
 async function searchMrs() {
-  const res = await fetch(
-    `https://gitlab.com/api/v4/projects/${project}/merge_requests?search=${search}&per_page=100`,
+  const mrs = await fetchJson<unknown>(
+    `https://gitlab.com/api/v4/projects/${project}/merge_requests?search=${encodeURIComponent(search)}&per_page=100`,
   );
-  const mrs = await res.json();
-  if (!Array.isArray(mrs)) return 0;
+  if (!Array.isArray(mrs)) {
+    throw new Error("GitLab merge request response was not an array.");
+  }
 
   let found = 0;
   for (let i = 0; i < mrs.length; i += 10) {
     const runs = await Promise.all(
-      mrs.slice(i, i + 10).map(async (mr: MergeRequest) => {
-        const res = await fetch(
+      (mrs as MergeRequest[]).slice(i, i + 10).map(async (mr) => {
+        const pipes = await fetchJson<unknown>(
           `https://gitlab.com/api/v4/projects/${project}/merge_requests/${mr.iid}/pipelines`,
         );
-        const pipes = await res.json();
-        return { mr, pipes: Array.isArray(pipes) ? pipes : [] };
+        if (!Array.isArray(pipes)) {
+          throw new Error("GitLab merge request pipelines response was not an array.");
+        }
+        return { mr, pipes: pipes as RestPipeline[] };
       }),
     );
     for (const { mr, pipes } of runs) {
-      for (const pipe of pipes as RestPipeline[]) {
+      for (const pipe of pipes) {
         found += show(pipe, mr.title);
       }
     }
@@ -116,7 +124,7 @@ async function searchTitles() {
   let found = 0;
 
   for (let i = 0; i < pages; i++) {
-    const response = await fetch("https://gitlab.com/api/graphql", {
+    const json = await fetchJson<GraphQLResponse>("https://gitlab.com/api/graphql", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -129,8 +137,11 @@ async function searchTitles() {
       }),
     });
 
-    const json: GraphQLResponse = await response.json();
-    const { nodes, pageInfo } = json.data.project.pipelines;
+    const pipelines = json.data?.project?.pipelines;
+    if (!pipelines) {
+      throw new Error("GitLab GraphQL response did not include pipeline data.");
+    }
+    const { nodes, pageInfo } = pipelines;
 
     for (const pipeline of nodes) {
       if (!pipeline.commit.title.toLowerCase().includes(search)) continue;
@@ -146,8 +157,13 @@ async function searchTitles() {
   return found;
 }
 
-const total = search.includes(".")
-  ? (await searchCommits()) + (await searchMrs())
-  : await searchTitles();
-if (total === 0) console.log("\nNo results found.");
-process.exit(0);
+try {
+  const total = search.includes(".")
+    ? (await searchCommits()) + (await searchMrs())
+    : await searchTitles();
+  if (total === 0) console.log("\nNo results found.");
+  process.exit(0);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
