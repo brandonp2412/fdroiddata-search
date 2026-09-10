@@ -1,5 +1,6 @@
 import process from "process";
 import boxen from "boxen";
+import { shouldIncludePipelineTitle } from "./search_helpers";
 import type {
   GraphQLResponse,
   Commit,
@@ -36,8 +37,12 @@ const QUERY = `
   }
 `;
 
-function show(pipe: RestPipeline, title: string) {
-  if (!title.toLowerCase().includes(name)) return 0;
+function show(
+  pipe: RestPipeline,
+  title: string,
+  exactMetadataMatch = false,
+) {
+  if (!shouldIncludePipelineTitle(title, name, exactMetadataMatch)) return 0;
   console.log(`\n${pipe.web_url}`);
   console.log(`  ${pipe.status} - ${title}`);
   return 1;
@@ -45,7 +50,7 @@ function show(pipe: RestPipeline, title: string) {
 
 async function searchCommits() {
   const commits: Commit[] = [];
-  for (let page = 1; page <= 10; page++) {
+  for (let page = 1; ; page++) {
     const res = await fetch(
       `https://gitlab.com/api/v4/projects/${project}/repository/commits?path=metadata/${search}.yml&per_page=100&page=${page}`,
     );
@@ -68,7 +73,7 @@ async function searchCommits() {
     );
     for (const { commit, pipes } of runs) {
       for (const pipe of pipes as RestPipeline[]) {
-        found += show(pipe, commit.title);
+        found += show(pipe, commit.title, true);
       }
     }
   }
