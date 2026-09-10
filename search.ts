@@ -4,6 +4,8 @@ import { parsePageLimit } from "./args";
 import { fetchJson } from "./http";
 import type {
   GraphQLResponse,
+  Pipeline,
+  PageInfo,
   Commit,
   RestPipeline,
   MergeRequest,
@@ -124,7 +126,7 @@ async function searchTitles() {
   let found = 0;
 
   for (let i = 0; i < pages; i++) {
-    const json = await fetchJson<GraphQLResponse>("https://gitlab.com/api/graphql", {
+    const json: GraphQLResponse = await fetchJson<GraphQLResponse>("https://gitlab.com/api/graphql", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -137,11 +139,13 @@ async function searchTitles() {
       }),
     });
 
-    const pipelines = json.data?.project?.pipelines;
+    const pipelines: { nodes: Pipeline[]; pageInfo: PageInfo } | undefined =
+      json.data?.project?.pipelines;
     if (!pipelines) {
       throw new Error("GitLab GraphQL response did not include pipeline data.");
     }
-    const { nodes, pageInfo } = pipelines;
+    const nodes: Pipeline[] = pipelines.nodes;
+    const pageInfo: PageInfo = pipelines.pageInfo;
 
     for (const pipeline of nodes) {
       if (!pipeline.commit.title.toLowerCase().includes(search)) continue;
