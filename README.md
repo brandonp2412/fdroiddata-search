@@ -11,7 +11,7 @@ This script searches through them using the Gitlab API.
 # Usage
 
 ```sh
-git clone https://github.com/brandonp2412/F-droid-data-search fdroiddata-search
+git clone https://github.com/brandonp2412/fdroiddata-search.git fdroiddata-search
 cd fdroiddata-search
 bun install
 bun search.ts flexify
