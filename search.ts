@@ -1,7 +1,7 @@
 import process from "process";
 import boxen from "boxen";
 import { parsePageLimit } from "./args";
-import { shouldIncludePipelineTitle } from "./search_helpers";
+import { nextPipelineCursor, shouldIncludePipelineTitle } from "./search_helpers";
 import { fetchJson } from "./http";
 import type {
   GraphQLResponse,
@@ -159,8 +159,8 @@ async function searchTitles() {
       console.log(`  ${pipeline.status.toLowerCase()} - ${pipeline.commit.title}`);
     }
 
-    if (!pageInfo.hasNextPage) break;
-    cursor = pageInfo.endCursor;
+    cursor = nextPipelineCursor(pageInfo.hasNextPage, pageInfo.endCursor, cursor);
+    if (cursor === null) break;
   }
 
   return found;
