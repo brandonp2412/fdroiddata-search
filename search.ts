@@ -1,5 +1,6 @@
 import process from "process";
 import boxen from "boxen";
+import { parsePageLimit } from "./args";
 import type {
   GraphQLResponse,
   Commit,
@@ -14,7 +15,13 @@ if (!search) {
 }
 console.log(boxen(`Searching for ${search}...`, { padding: 1 }));
 
-const pages = Number(process.argv[3]) || 50;
+let pages: number;
+try {
+  pages = parsePageLimit(process.argv[3]);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 const project = encodeURIComponent("fdroid/fdroiddata");
 const name = search.split(".").pop()!;
 
