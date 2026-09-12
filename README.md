@@ -2,11 +2,11 @@
 
 Raw text searching for Fdroiddata pipelines is disabled.
 
-![](./screenshot-gitlab.png)
+![GitLab F-Droid Data pipelines page showing the raw text search limitation](./screenshot-gitlab.png)
 
 This script searches through them using the Gitlab API.
 
-![](./screenshot-search.png)
+![Terminal running the F-Droid data search script for Flexify pipelines](./screenshot-search.png)
 
 # Usage
 
