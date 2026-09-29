@@ -17,3 +17,21 @@ export function nextPipelineCursor(
   }
   return endCursor;
 }
+
+
+export function nextCommitUntil(
+  batchLength: number,
+  pageSize: number,
+  lastCommittedDate: string | undefined,
+  currentUntil: string | null,
+  newCommitCount: number,
+): string | null {
+  if (batchLength < pageSize) return null;
+  if (
+    !lastCommittedDate ||
+    (lastCommittedDate === currentUntil && newCommitCount === 0)
+  ) {
+    throw new Error("GitLab commit pagination did not advance.");
+  }
+  return lastCommittedDate;
+}

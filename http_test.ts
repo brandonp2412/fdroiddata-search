@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { fetchJson } from "./http";
+import { fetchExists, fetchJson } from "./http";
 
 const realFetch = globalThis.fetch;
 
@@ -21,7 +21,7 @@ describe("fetchJson", () => {
     globalThis.fetch = (async () =>
       new Response("  rate   limit exceeded  ", { status: 429 })) as typeof fetch;
 
-    await expect(fetchJson("https://example.test")).rejects.toThrow(
+    await expect(fetchJson("https://example.test", undefined, 100, 1)).rejects.toThrow(
       "GitLab request failed with HTTP 429: rate limit exceeded",
     );
   });
@@ -40,7 +40,7 @@ describe("fetchJson", () => {
       throw new Error("connection reset");
     }) as typeof fetch;
 
-    await expect(fetchJson("https://example.test")).rejects.toThrow(
+    await expect(fetchJson("https://example.test", undefined, 100, 1)).rejects.toThrow(
       "GitLab request failed: connection reset",
     );
   });
@@ -56,8 +56,56 @@ describe("fetchJson", () => {
         signal.addEventListener("abort", () => reject(signal.reason), { once: true });
       })) as typeof fetch;
 
-    await expect(fetchJson("https://example.test", undefined, 5)).rejects.toThrow(
+    await expect(fetchJson("https://example.test", undefined, 5, 1)).rejects.toThrow(
       "GitLab request timed out after 5ms.",
     );
+  });
+
+  test("retries transient GET failures", async () => {
+    let attempts = 0;
+    globalThis.fetch = (async () => {
+      attempts++;
+      if (attempts === 1) {
+        return new Response("temporary upstream failure", { status: 500 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+
+    await expect(fetchJson<{ ok: boolean }>("https://example.test", undefined, 100, 2))
+      .resolves.toEqual({ ok: true });
+    expect(attempts).toBe(2);
+  });
+
+  test("does not retry non-idempotent requests", async () => {
+    let attempts = 0;
+    globalThis.fetch = (async () => {
+      attempts++;
+      return new Response("temporary upstream failure", { status: 500 });
+    }) as typeof fetch;
+
+    await expect(
+      fetchJson("https://example.test", { method: "POST" }, 100, 3),
+    ).rejects.toThrow("GitLab request failed with HTTP 500");
+    expect(attempts).toBe(1);
+  });
+});
+
+describe("fetchExists", () => {
+  test("uses HEAD and returns true for an existing resource", async () => {
+    let method: string | undefined;
+    globalThis.fetch = (async (_input, init) => {
+      method = init?.method;
+      return new Response(null, { status: 200 });
+    }) as typeof fetch;
+
+    await expect(fetchExists("https://example.test")).resolves.toBe(true);
+    expect(method).toBe("HEAD");
+  });
+
+  test("returns false for a missing resource", async () => {
+    globalThis.fetch = (async () =>
+      new Response(null, { status: 404 })) as typeof fetch;
+
+    await expect(fetchExists("https://example.test")).resolves.toBe(false);
   });
 });

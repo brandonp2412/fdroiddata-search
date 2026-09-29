@@ -1,8 +1,8 @@
 import process from "process";
 import boxen from "boxen";
 import { parsePageLimit } from "./args";
-import { nextPipelineCursor, shouldIncludePipelineTitle } from "./search_helpers";
-import { fetchJson } from "./http";
+import { nextCommitUntil, nextPipelineCursor, shouldIncludePipelineTitle } from "./search_helpers";
+import { fetchExists, fetchJson } from "./http";
 import type {
   GraphQLResponse,
   Pipeline,
@@ -59,17 +59,48 @@ function show(
 }
 
 async function searchCommits() {
-  const commits: Commit[] = [];
   const metadataPath = encodeURIComponent(`metadata/${search}.yml`);
-  for (let page = 1; ; page++) {
-    const batch = await fetchJson<unknown>(
-      `https://gitlab.com/api/v4/projects/${project}/repository/commits?path=${metadataPath}&per_page=100&page=${page}`,
+  const metadataExists = await fetchExists(
+    `https://gitlab.com/api/v4/projects/${project}/repository/files/${metadataPath}?ref=HEAD`,
+  );
+  if (!metadataExists) return 0;
+
+  const commits: Commit[] = [];
+  const seenCommitIds = new Set<string>();
+  const pageSize = 100;
+  let until: string | null = null;
+
+  for (;;) {
+    const url = new URL(
+      `https://gitlab.com/api/v4/projects/${project}/repository/commits`,
     );
+    url.searchParams.set("path", `metadata/${search}.yml`);
+    url.searchParams.set("per_page", String(pageSize));
+    if (until) url.searchParams.set("until", until);
+
+    const batch = await fetchJson<unknown>(url);
     if (!Array.isArray(batch)) {
       throw new Error("GitLab commits response was not an array.");
     }
-    commits.push(...(batch as Commit[]));
-    if (batch.length < 100) break;
+
+    const typedBatch = batch as Commit[];
+    let newCommitCount = 0;
+    for (const commit of typedBatch) {
+      if (seenCommitIds.has(commit.id)) continue;
+      seenCommitIds.add(commit.id);
+      commits.push(commit);
+      newCommitCount++;
+    }
+
+    const nextUntil = nextCommitUntil(
+      typedBatch.length,
+      pageSize,
+      typedBatch.at(-1)?.committed_date,
+      until,
+      newCommitCount,
+    );
+    if (nextUntil === null) break;
+    until = nextUntil;
   }
 
   let found = 0;
@@ -96,29 +127,56 @@ async function searchCommits() {
 }
 
 async function searchMrs() {
-  const mrs = await fetchJson<unknown>(
-    `https://gitlab.com/api/v4/projects/${project}/merge_requests?search=${encodeURIComponent(search)}&per_page=100`,
-  );
-  if (!Array.isArray(mrs)) {
-    throw new Error("GitLab merge request response was not an array.");
+  async function fetchMergeRequests(filter: string) {
+    const results: MergeRequest[] = [];
+    for (let page = 1; ; page++) {
+      const batch = await fetchJson<unknown>(
+        `https://gitlab.com/api/v4/projects/${project}/merge_requests?${filter}&per_page=100&page=${page}`,
+      );
+      if (!Array.isArray(batch)) {
+        throw new Error("GitLab merge request response was not an array.");
+      }
+      results.push(...(batch as MergeRequest[]));
+      if (batch.length < 100) break;
+    }
+    return results;
   }
 
+  const [branchMatches, textMatches] = await Promise.all([
+    fetchMergeRequests(`source_branch=${encodeURIComponent(search)}`),
+    fetchMergeRequests(`search=${encodeURIComponent(search)}`),
+  ]);
+
+  const candidates = new Map<
+    number,
+    { mr: MergeRequest; exactPackageMatch: boolean }
+  >();
+  for (const mr of branchMatches) {
+    candidates.set(mr.iid, { mr, exactPackageMatch: true });
+  }
+  for (const mr of textMatches) {
+    if (!candidates.has(mr.iid)) {
+      candidates.set(mr.iid, { mr, exactPackageMatch: false });
+    }
+  }
+
+  const mrs = [...candidates.values()];
   let found = 0;
   for (let i = 0; i < mrs.length; i += 10) {
     const runs = await Promise.all(
-      (mrs as MergeRequest[]).slice(i, i + 10).map(async (mr) => {
+      mrs.slice(i, i + 10).map(async ({ mr, exactPackageMatch }) => {
         const pipes = await fetchJson<unknown>(
           `https://gitlab.com/api/v4/projects/${project}/merge_requests/${mr.iid}/pipelines`,
         );
         if (!Array.isArray(pipes)) {
           throw new Error("GitLab merge request pipelines response was not an array.");
         }
-        return { mr, pipes: pipes as RestPipeline[] };
+        return { mr, pipes: pipes as RestPipeline[], exactPackageMatch };
       }),
     );
-    for (const { mr, pipes } of runs) {
+    for (const { mr, pipes, exactPackageMatch } of runs) {
       for (const pipe of pipes) {
-        found += show(pipe, mr.title);
+        found += show(pipe, mr.title, exactPackageMatch);
       }
     }
   }

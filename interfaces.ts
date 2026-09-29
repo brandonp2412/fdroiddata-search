@@ -25,6 +25,7 @@ export interface PageInfo {
 export interface Commit {
   id: string;
   title: string;
+  committed_date: string;
 }
 
 export interface RestPipeline {
