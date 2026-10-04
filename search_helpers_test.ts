@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { nextCommitUntil, nextPipelineCursor } from "./search_helpers";
+import { metadataPathForPackageId, nextCommitUntil, nextPipelineCursor } from "./search_helpers";
+
+describe("metadataPathForPackageId", () => {
+  test("preserves mixed-case application IDs", () => {
+    expect(metadataPathForPackageId("app.hkTransport")).toBe(
+      "metadata/app.hkTransport.yml",
+    );
+  });
+});
 
 describe("nextPipelineCursor", () => {
   test("stops when there is no next page", () => {

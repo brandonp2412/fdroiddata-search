@@ -1,7 +1,7 @@
 import process from "process";
 import boxen from "boxen";
 import { parsePageLimit } from "./args";
-import { nextCommitUntil, nextPipelineCursor, shouldIncludePipelineTitle } from "./search_helpers";
+import { metadataPathForPackageId, nextCommitUntil, nextPipelineCursor, shouldIncludePipelineTitle } from "./search_helpers";
 import { fetchExists, fetchJson } from "./http";
 import type {
   GraphQLResponse,
@@ -12,8 +12,9 @@ import type {
   MergeRequest,
 } from "./interfaces";
 
-const search = process.argv[2]?.toLowerCase();
-if (!search) {
+const rawSearch = process.argv[2];
+const search = rawSearch?.toLowerCase();
+if (!rawSearch || !search) {
   console.error("Usage: bun search.ts MY_APP_NAME [PAGES]");
   process.exit(1);
 }
@@ -59,7 +60,8 @@ function show(
 }
 
 async function searchCommits() {
-  const metadataPath = encodeURIComponent(`metadata/${search}.yml`);
+  const metadataSourcePath = metadataPathForPackageId(rawSearch);
+  const metadataPath = encodeURIComponent(metadataSourcePath);
   const metadataExists = await fetchExists(
     `https://gitlab.com/api/v4/projects/${project}/repository/files/${metadataPath}?ref=HEAD`,
   );
@@ -74,7 +76,7 @@ async function searchCommits() {
     const url = new URL(
       `https://gitlab.com/api/v4/projects/${project}/repository/commits`,
     );
-    url.searchParams.set("path", `metadata/${search}.yml`);
+    url.searchParams.set("path", metadataSourcePath);
     url.searchParams.set("per_page", String(pageSize));
     if (until) url.searchParams.set("until", until);
 

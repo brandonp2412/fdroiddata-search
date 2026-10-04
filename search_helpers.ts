@@ -1,3 +1,7 @@
+export function metadataPathForPackageId(packageId: string): string {
+  return `metadata/${packageId}.yml`;
+}
+
 export function shouldIncludePipelineTitle(
   title: string,
   needle: string,
